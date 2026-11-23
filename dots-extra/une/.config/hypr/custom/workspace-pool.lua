@@ -27,7 +27,7 @@ end
 local function neighbor_workspace(mon_id, current, delta, create_at_end)
     local used, target = {}, nil
     for _, ws in ipairs(hl.get_workspaces()) do
-        if ws.id > 0 then
+        if ws.id and ws.id > 0 then -- kapanmakta olan çalışma alanının kimliği boş gelebilir
             used[ws.id] = true -- bütün monitörlerdeki kimlikler, başkasınınkini çalmayalım
             if in_pool(ws, mon_id) then
                 if delta > 0 and ws.id > current then
@@ -70,13 +70,22 @@ local function focus_on_current(target)
     if mon and id and on_other_monitor(id, mon.id) then quiet(go) else go() end
 end
 
+local function has_windows(ws_id)
+    for _, w in ipairs(hl.get_windows()) do
+        if w.workspace and w.workspace.id == ws_id then return true end
+    end
+    return false
+end
+
 -- İmlecin olduğu monitörde komşu çalışma alanına geçer; uçlarda başa sarmaz.
+-- Sondan sonrası yeni çalışma alanı yalnızca bulunduğun çalışma alanında pencere varsa açılır (boştan boşa zincirleme açılmasın).
 local function step_workspace(delta, create_at_end)
     return function()
         local mon = hl.get_monitor_at_cursor()
         if not mon or not mon.active_workspace then return end
 
-        local target = neighbor_workspace(mon.id, mon.active_workspace.id, delta, create_at_end)
+        local create = create_at_end and has_windows(mon.active_workspace.id)
+        local target = neighbor_workspace(mon.id, mon.active_workspace.id, delta, create)
         if not target then return end
         if not mon.focused then hl.dispatch(hl.dsp.focus({ monitor = mon.name })) end
         focus_on_current(target)
@@ -119,12 +128,13 @@ hl.bind("SUPER + mouse_right", step_workspace(-1, false), { description = "Works
 hl.bind("SUPER + mouse_left", step_workspace(1, true), { description = "Workspace: Pool next (horizontal wheel)" })
 hl.bind("SUPER + SHIFT + mouse_right", move_window_step(-1, false), { description = "Window: Send to previous pool workspace" })
 hl.bind("SUPER + SHIFT + mouse_left", move_window_step(1, true), { description = "Window: Send to next pool workspace" })
-hl.bind("SUPER + ALT + X", swap_monitors, { description = "Workspace: Swap monitors" })
+hl.unbind("SUPER + X") -- end-4: metin düzenleyici
+hl.bind("SUPER + X", swap_monitors, { description = "Workspace: Swap monitors" })
 hl.bind("SUPER + mouse:276", swap_monitors)
 
 -- ---------------------------------------------------------------------------------------------
--- end-4'ün çalışma alanı kısayolları 10'luk gruplara ve monitöre göre çalışır; bizim yöntemde numaralar mutlak,
--- seçilen çalışma alanı odaktaki monitöre gelir ve gezinme havuzdadır. Aşağıda hepsi buna çevrilir.
+-- end-4'ün 10'luk dilimleri (workspace_in_group) korunur; farkı: seçilen çalışma alanı odaktaki monitöre gelir
+-- ve gezinme ortak havuzdadır. Aşağıda kısayollar buna çevrilir.
 -- ---------------------------------------------------------------------------------------------
 
 -- Hedef çalışma alanı başka monitörde gizliyse önce bu monitöre alır; pencere görünmez yerde kalmasın.
@@ -138,10 +148,11 @@ local function bring_here(target, mon)
     end
 end
 
-local function send_to_workspace(id)
+local function send_to_workspace(i)
     return function()
         local win = hl.get_active_window()
         if not win or not win.monitor then return end
+        local id = workspace_in_group(i)
         bring_here(id, win.monitor)
         hl.dispatch(hl.dsp.window.move({ workspace = id, follow = false }))
     end
@@ -154,7 +165,7 @@ end
 
 local numpad = { 87, 88, 89, 83, 84, 85, 79, 80, 81, 90 }
 for i = 1, 10 do
-    local goto_ws = function() focus_on_current(i) end
+    local goto_ws = function() focus_on_current(workspace_in_group(i)) end
     rebind("SUPER + " .. (i % 10), goto_ws, "Workspace: Focus " .. i)
     rebind("SUPER + code:" .. (9 + i), goto_ws)
     rebind("SUPER + code:" .. numpad[i], goto_ws)
