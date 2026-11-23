@@ -18,15 +18,8 @@ Item {
     readonly property var toplevels: ToplevelManager.toplevels
     // Clamp to avoid lock-screen temp workspace (2147483647 - N) leaking into UI
     readonly property int effectiveActiveWorkspaceId: Math.max(1, Math.min(100, monitor?.activeWorkspace?.id ?? 1))
-    // Ortak havuz: tek grup; açık çalışma alanı numarası ızgaraya sığmazsa satır eklenir.
-    readonly property int poolHighest: {
-        let m = 0;
-        for (const ws of Hyprland.workspaces.values) if (ws.id > m && ws.id < 100) m = ws.id;
-        return m;
-    }
-    readonly property int rowsShown: Math.max(Config.options.overview.rows, Math.ceil(poolHighest / Config.options.overview.columns))
-    readonly property int workspacesShown: rowsShown * Config.options.overview.columns
-    readonly property int workspaceGroup: 0
+    readonly property int workspacesShown: Config.options.overview.rows * Config.options.overview.columns
+    readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / workspacesShown)
     property bool monitorIsFocused: (Hyprland.focusedMonitor?.name == monitor.name)
     property var windows: HyprlandData.windowList
     property var windowByAddress: HyprlandData.windowByAddress
@@ -62,8 +55,8 @@ Item {
     
     function getWsRow(ws) {
         // 1-indexed workspace, 0-indexed row
-        var normalRow = Math.floor((ws - 1) / Config.options.overview.columns) % root.rowsShown;
-        return (Config.options.overview.orderBottomUp ? root.rowsShown - normalRow - 1 : normalRow);
+        var normalRow = Math.floor((ws - 1) / Config.options.overview.columns) % Config.options.overview.rows;
+        return (Config.options.overview.orderBottomUp ? Config.options.overview.rows - normalRow - 1 : normalRow);
     }
     function getWsColumn(ws) {
         // 1-indexed workspace, 0-indexed column
@@ -72,7 +65,7 @@ Item {
     }
     function getWsInCell(ri, ci) {
         // 1-indexed workspace, 0-indexed row and column index
-        return (Config.options.overview.orderBottomUp ? root.rowsShown - ri - 1 : ri) * Config.options.overview.columns + (Config.options.overview.orderRightLeft ? Config.options.overview.columns - ci - 1 : ci) + 1
+        return (Config.options.overview.orderBottomUp ? Config.options.overview.rows - ri - 1 : ri) * Config.options.overview.columns + (Config.options.overview.orderRightLeft ? Config.options.overview.columns - ci - 1 : ci) + 1
     }
 
     StyledRectangularShadow {
@@ -97,7 +90,7 @@ Item {
             spacing: workspaceSpacing
             
             Repeater {
-                model: root.rowsShown
+                model: Config.options.overview.rows
                 delegate: Row {
                     id: row
                     required property int index
@@ -121,7 +114,7 @@ Item {
                             property bool workspaceAtLeft: colIndex === 0
                             property bool workspaceAtRight: colIndex === Config.options.overview.columns - 1
                             property bool workspaceAtTop: row.index === 0
-                            property bool workspaceAtBottom: row.index === root.rowsShown - 1
+                            property bool workspaceAtBottom: row.index === Config.options.overview.rows - 1
                             topLeftRadius: (workspaceAtLeft && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
                             topRightRadius: (workspaceAtRight && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
                             bottomLeftRadius: (workspaceAtLeft && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
@@ -218,7 +211,7 @@ Item {
                     property bool workspaceAtLeft: workspaceColIndex === 0
                     property bool workspaceAtRight: workspaceColIndex === Config.options.overview.columns - 1
                     property bool workspaceAtTop: workspaceRowIndex === 0
-                    property bool workspaceAtBottom: workspaceRowIndex === root.rowsShown - 1
+                    property bool workspaceAtBottom: workspaceRowIndex === Config.options.overview.rows - 1
                     property bool workspaceAtTopLeft: (workspaceAtLeft && workspaceAtTop) 
                     property bool workspaceAtTopRight: (workspaceAtRight && workspaceAtTop) 
                     property bool workspaceAtBottomLeft: (workspaceAtLeft && workspaceAtBottom) 
@@ -321,7 +314,7 @@ Item {
                 property bool workspaceAtLeft: colIndex === 0
                 property bool workspaceAtRight: colIndex === Config.options.overview.columns - 1
                 property bool workspaceAtTop: rowIndex === 0
-                property bool workspaceAtBottom: rowIndex === root.rowsShown - 1
+                property bool workspaceAtBottom: rowIndex === Config.options.overview.rows - 1
                 topLeftRadius: (workspaceAtLeft && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
                 topRightRadius: (workspaceAtRight && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
                 bottomLeftRadius: (workspaceAtLeft && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
