@@ -1,0 +1,123 @@
+-- Ortak çalışma alanı havuzu: iki monitörde çalışma alanları monitöre bağlı sayılmaz.
+-- Gezinme, diğer monitörde görünen dışındaki tüm çalışma alanlarını dolaşır; seçilen çalışma alanı
+-- odaktaki monitöre gelir. Çalışma alanı sayısı/numaraları end-4'ün kısayollarına dokunmaz.
+local MON1 = "DP-1"      -- birincil monitör
+local MON2 = "HDMI-A-1"  -- ikincil monitör
+
+-- Çalışma alanı animasyonu end-4 varsayılanıdır (general.lua); takasta geçici olarak dikey kayar.
+local function workspace_anim(style)
+    hl.animation({ leaf = "workspaces", enabled = true, speed = 7, bezier = "menu_decel", style = style })
+end
+
+-- Her iki monitörün etkin çalışma alanlarını takas eder (monitörler üst üste: dikey kayar).
+local function swap_monitors()
+    workspace_anim("slidevert")
+    hl.timer(function() workspace_anim("slide") end, { timeout = 600, type = "oneshot" })
+    hl.dispatch(hl.dsp.workspace.swap_monitors({ monitor1 = MON1, monitor2 = MON2 }))
+end
+
+-- Komşu çalışma alanı adayı: o monitöre bağlı olanlar ve başka monitörde şu an görünen dışındakiler.
+local function in_pool(ws, mon_id)
+    if not ws.monitor then return false end
+    if ws.monitor.id == mon_id then return true end
+    return not (ws.monitor.active_workspace and ws.monitor.active_workspace.id == ws.id)
+end
+
+-- Komşu çalışma alanı kimliği (uçlarda sarmaz); create_at_end ise sondan sonra boş bir kimlik döner.
+local function neighbor_workspace(mon_id, current, delta, create_at_end)
+    local used, target = {}, nil
+    for _, ws in ipairs(hl.get_workspaces()) do
+        if ws.id > 0 then
+            used[ws.id] = true -- bütün monitörlerdeki kimlikler, başkasınınkini çalmayalım
+            if in_pool(ws, mon_id) then
+                if delta > 0 and ws.id > current then
+                    if not target or ws.id < target then target = ws.id end
+                elseif delta < 0 and ws.id < current then
+                    if not target or ws.id > target then target = ws.id end
+                end
+            end
+        end
+    end
+
+    if not target and create_at_end then
+        target = current + 1
+        while used[target] do target = target + 1 end
+    end
+    return target
+end
+
+-- Animasyonları 150 ms kapatıp işlemi yapar: bir çalışma alanı başka monitörden getirilirken pencereler
+-- eski monitörün koordinatından kayarak gelir ve kaydırma animasyonuyla çakışır.
+local function quiet(fn)
+    hl.config({ animations = { enabled = false } })
+    fn()
+    hl.timer(function() hl.config({ animations = { enabled = true } }) end, { timeout = 150, type = "oneshot" })
+end
+
+local function on_other_monitor(id, mon_id)
+    for _, ws in ipairs(hl.get_workspaces()) do
+        if ws.id == id then return ws.monitor ~= nil and ws.monitor.id ~= mon_id end
+    end
+    return false
+end
+
+-- Çalışma alanına, hangi monitöre bağlı olursa olsun odaktaki monitörde geçer
+-- (başka monitörde görünüyorsa iki monitör çalışma alanlarını değiştirir).
+local function focus_on_current(target)
+    local mon = hl.get_monitor_at_cursor()
+    local go = function() hl.dispatch(hl.dsp.focus({ workspace = target, on_current_monitor = true })) end
+    local id = tonumber(target)
+    if mon and id and on_other_monitor(id, mon.id) then quiet(go) else go() end
+end
+
+-- İmlecin olduğu monitörde komşu çalışma alanına geçer; uçlarda başa sarmaz.
+local function step_workspace(delta, create_at_end)
+    return function()
+        local mon = hl.get_monitor_at_cursor()
+        if not mon or not mon.active_workspace then return end
+
+        local target = neighbor_workspace(mon.id, mon.active_workspace.id, delta, create_at_end)
+        if not target then return end
+        if not mon.focused then hl.dispatch(hl.dsp.focus({ monitor = mon.name })) end
+        focus_on_current(target)
+    end
+end
+
+local function focus_workspace(ws)
+    return function()
+        local delta = tostring(ws):match("^m([+-]%d+)$")
+        if delta then step_workspace(tonumber(delta), false)() else focus_on_current(ws) end
+    end
+end
+
+-- Odaktaki pencereyi komşu çalışma alanına taşır. Hedef başka monitöre bağlıysa önce bu monitöre alınır,
+-- pencere gizli bir monitörde kaybolmasın.
+local function move_window_step(delta, create_at_end)
+    return function()
+        local win = hl.get_active_window()
+        if not win or not win.monitor or not win.workspace then return end
+
+        local target = neighbor_workspace(win.monitor.id, win.workspace.id, delta, create_at_end)
+        if not target then return end
+        for _, ws in ipairs(hl.get_workspaces()) do
+            if ws.id == target and ws.monitor and ws.monitor.id ~= win.monitor.id then
+                quiet(function() hl.dispatch(hl.dsp.workspace.move({ workspace = target, monitor = win.monitor.name })) end)
+                break
+            end
+        end
+        hl.dispatch(hl.dsp.window.move({ workspace = target }))
+    end
+end
+
+-- end-4'ün göreli çalışma alanı kısayollarının yerine havuza duyarlı olanlar.
+hl.unbind("CTRL + SUPER + Left")
+hl.unbind("CTRL + SUPER + Right")
+hl.bind("CTRL + SUPER + Right", focus_workspace("m+1"), { description = "Workspace: Pool next" })
+hl.bind("CTRL + SUPER + Left", focus_workspace("m-1"), { description = "Workspace: Pool previous" })
+hl.bind("CTRL + SUPER + Down", focus_workspace("emptym"), { description = "Workspace: Pool next empty" })
+hl.bind("SUPER + mouse_right", step_workspace(-1, false), { description = "Workspace: Pool previous (horizontal wheel)" })
+hl.bind("SUPER + mouse_left", step_workspace(1, true), { description = "Workspace: Pool next (horizontal wheel)" })
+hl.bind("SUPER + SHIFT + mouse_right", move_window_step(-1, false), { description = "Window: Send to previous pool workspace" })
+hl.bind("SUPER + SHIFT + mouse_left", move_window_step(1, true), { description = "Window: Send to next pool workspace" })
+hl.bind("SUPER + ALT + X", swap_monitors, { description = "Workspace: Swap monitors" })
+hl.bind("SUPER + mouse:276", swap_monitors)
