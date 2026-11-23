@@ -121,3 +121,63 @@ hl.bind("SUPER + SHIFT + mouse_right", move_window_step(-1, false), { descriptio
 hl.bind("SUPER + SHIFT + mouse_left", move_window_step(1, true), { description = "Window: Send to next pool workspace" })
 hl.bind("SUPER + ALT + X", swap_monitors, { description = "Workspace: Swap monitors" })
 hl.bind("SUPER + mouse:276", swap_monitors)
+
+-- ---------------------------------------------------------------------------------------------
+-- end-4'ün çalışma alanı kısayolları 10'luk gruplara ve monitöre göre çalışır; bizim yöntemde numaralar mutlak,
+-- seçilen çalışma alanı odaktaki monitöre gelir ve gezinme havuzdadır. Aşağıda hepsi buna çevrilir.
+-- ---------------------------------------------------------------------------------------------
+
+-- Hedef çalışma alanı başka monitörde gizliyse önce bu monitöre alır; pencere görünmez yerde kalmasın.
+local function bring_here(target, mon)
+    for _, ws in ipairs(hl.get_workspaces()) do
+        if ws.id == target and ws.monitor and ws.monitor.id ~= mon.id
+            and not (ws.monitor.active_workspace and ws.monitor.active_workspace.id == ws.id) then
+            quiet(function() hl.dispatch(hl.dsp.workspace.move({ workspace = target, monitor = mon.name })) end)
+            return
+        end
+    end
+end
+
+local function send_to_workspace(id)
+    return function()
+        local win = hl.get_active_window()
+        if not win or not win.monitor then return end
+        bring_here(id, win.monitor)
+        hl.dispatch(hl.dsp.window.move({ workspace = id, follow = false }))
+    end
+end
+
+local function rebind(keys, fn, description)
+    hl.unbind(keys)
+    hl.bind(keys, fn, description and { description = description } or nil)
+end
+
+local numpad = { 87, 88, 89, 83, 84, 85, 79, 80, 81, 90 }
+for i = 1, 10 do
+    local goto_ws = function() focus_on_current(i) end
+    rebind("SUPER + " .. (i % 10), goto_ws, "Workspace: Focus " .. i)
+    rebind("SUPER + code:" .. (9 + i), goto_ws)
+    rebind("SUPER + code:" .. numpad[i], goto_ws)
+    local send = send_to_workspace(i)
+    rebind("SUPER + ALT + " .. (i % 10), send, "Window: Send to workspace " .. i)
+    rebind("SUPER + ALT + code:" .. numpad[i], send)
+end
+
+-- Göreli gezinme ve taşıma: havuzda bir sonraki/öncekine (sondan sonrası yeni çalışma alanı açar)
+for _, k in ipairs({ "SUPER + Page_Down", "CTRL + SUPER + Page_Down", "SUPER + mouse_down", "CTRL + SUPER + mouse_down" }) do
+    rebind(k, step_workspace(1, true))
+end
+for _, k in ipairs({ "SUPER + Page_Up", "CTRL + SUPER + Page_Up", "SUPER + mouse_up", "CTRL + SUPER + mouse_up" }) do
+    rebind(k, step_workspace(-1, false))
+end
+for _, k in ipairs({ "SUPER + SHIFT + mouse_down", "SUPER + ALT + mouse_down", "SUPER + ALT + Page_Down", "CTRL + SUPER + SHIFT + Right" }) do
+    rebind(k, move_window_step(1, true))
+end
+for _, k in ipairs({ "SUPER + SHIFT + mouse_up", "SUPER + ALT + mouse_up", "SUPER + ALT + Page_Up", "CTRL + SUPER + SHIFT + Left" }) do
+    rebind(k, move_window_step(-1, false))
+end
+rebind("SUPER + SHIFT + Page_Down", move_window_step(1, true), "Window: Send to workspace right")
+rebind("SUPER + SHIFT + Page_Up", move_window_step(-1, false), "Window: Send to workspace left")
+
+-- Quickshell (çubuk göstergesi) havuz işlevlerini `hyprctl eval "POOL.step(1, true)()"` ile çağırır.
+POOL = { step = step_workspace, send = move_window_step, go = focus_on_current }
