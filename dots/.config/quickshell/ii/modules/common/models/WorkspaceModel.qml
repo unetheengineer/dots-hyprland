@@ -13,8 +13,14 @@ NestableObject {
     readonly property int activeWorkspace: monitor?.activeWorkspace?.id ?? 1
     readonly property bool currentWorkspaceNotFake: activeWindow?.activated ?? false // Active empty workspace = fake. At least, that's how I like to call it.
     readonly property int fakeWorkspace: currentWorkspaceNotFake ? -9999 : activeWorkspace
-    readonly property int shownCount: C.Config.options.bar.workspaces.shown
-    readonly property int group: Math.floor((activeWorkspace - 1) / shownCount)
+    // Ortak havuz: çalışma alanları monitöre ve 10'luk gruba bağlı değil; gösterge 1'den en yüksek açık numaraya kadar uzar.
+    readonly property int highestId: {
+        let m = 0;
+        for (const ws of Hyprland.workspaces.values) if (ws.id > m && ws.id < 100) m = ws.id;
+        return m;
+    }
+    readonly property int shownCount: Math.max(C.Config.options.bar.workspaces.shown, highestId)
+    readonly property int group: 0
     readonly property var specialWorkspace: liveMonitorData?.specialWorkspace
     readonly property string specialWorkspaceName: specialWorkspace?.name.replace("special:", "") ?? "special"
     readonly property bool specialWorkspaceActive: specialWorkspaceName !== ""
@@ -57,7 +63,6 @@ NestableObject {
             root.updateWorkspaceOccupied();
         }
     }
-    onGroupChanged: {
-        updateWorkspaceOccupied();
-    }
+    onGroupChanged: updateWorkspaceOccupied()
+    onShownCountChanged: updateWorkspaceOccupied()
 }

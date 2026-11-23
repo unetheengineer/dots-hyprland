@@ -54,7 +54,8 @@ ButtonMouseArea {
     }
 
     function switchWorkspaceToHovered() {
-        Hyprland.dispatch(`hl.dsp.focus({workspace = ${wsModel.getWorkspaceIdAt(hoverIndex)}})`);
+        Hyprland.dispatch(`hl.dsp.focus({monitor = "${root.monitor.name}"})`);
+        Hyprland.dispatch(`hl.dsp.focus({workspace = ${wsModel.getWorkspaceIdAt(hoverIndex)}, on_current_monitor = true})`);
     }
 
     function toggleSpecial() {
@@ -70,10 +71,11 @@ ButtonMouseArea {
             toggleSpecial()
     }
     onWheel: event => {
+        // Havuzda gezinme: custom/workspace-pool.lua'daki POOL.step (imlecin olduğu monitörde)
         if (event.angleDelta.y < 0)
-            Hyprland.dispatch(`hl.dsp.focus({workspace = "r+1"})`);
+            Quickshell.execDetached(["hyprctl", "eval", "POOL.step(1, true)()"]);
         else if (event.angleDelta.y > 0)
-            Hyprland.dispatch(`hl.dsp.focus({workspace = "r-1"})`);
+            Quickshell.execDetached(["hyprctl", "eval", "POOL.step(-1, false)()"]);
     }
 
     // Indications
